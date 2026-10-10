@@ -1,9 +1,9 @@
 
+
 import tempfile
 import zipfile
 from pathlib import Path, PurePosixPath
 
-import cv2
 import streamlit as st
 from streamlit_webrtc import (
     WebRtcMode,
@@ -32,21 +32,13 @@ st.set_page_config(
 st.markdown(
     """
     <style>
-    :root {
-        color-scheme: light;
-    }
-
     .stApp {
         background: linear-gradient(135deg, #f8fbff, #edf5ff);
         color: #183153;
     }
 
-    [data-testid="stHeader"] {
-        background: rgba(248, 251, 255, 0.92);
-    }
-
     [data-testid="stSidebar"] {
-        background: linear-gradient(180deg, #ffffff, #edf5ff);
+        background: #ffffff;
         border-right: 1px solid #dbeafe;
     }
 
@@ -60,21 +52,20 @@ st.markdown(
         font-weight: 900;
         color: #1261b5;
         margin-bottom: 4px;
-        letter-spacing: -1px;
     }
 
     .sub-title {
         text-align: center;
         color: #526b8b;
         font-size: 17px;
-        margin: 5px 0 22px 0;
+        margin-bottom: 24px;
     }
 
     .hero-card {
-        background: linear-gradient(135deg, #ffffff, #e9f4ff);
+        background: linear-gradient(135deg, #ffffff, #eaf4ff);
         border: 1px solid #c8e1ff;
         border-radius: 22px;
-        padding: 25px;
+        padding: 24px;
         text-align: center;
         box-shadow: 0 8px 25px rgba(36, 99, 170, 0.08);
         margin-bottom: 18px;
@@ -84,7 +75,7 @@ st.markdown(
         background: #ffffff;
         border: 1px solid #d5e7fb;
         border-radius: 18px;
-        padding: 20px;
+        padding: 18px;
         text-align: center;
         box-shadow: 0 5px 18px rgba(36, 99, 170, 0.07);
         margin-bottom: 14px;
@@ -92,18 +83,12 @@ st.markdown(
 
     .robot-avatar {
         font-size: 62px;
-        line-height: 1.3;
-        animation: robotFloat 3s ease-in-out infinite;
+        animation: floatRobot 3s ease-in-out infinite;
     }
 
-    @keyframes robotFloat {
+    @keyframes floatRobot {
         0%, 100% { transform: translateY(0); }
         50% { transform: translateY(-8px); }
-    }
-
-    .section-title {
-        color: #1261b5;
-        font-weight: 800;
     }
 
     .footer {
@@ -122,10 +107,6 @@ st.markdown(
         box-shadow: 0 4px 12px rgba(36, 99, 170, 0.05);
     }
 
-    div[data-testid="stMetricLabel"] {
-        color: #526b8b;
-    }
-
     div[data-testid="stMetricValue"] {
         color: #1261b5;
         font-weight: 800;
@@ -134,24 +115,6 @@ st.markdown(
     div.stButton > button {
         border-radius: 11px;
         font-weight: 700;
-        transition: all 0.2s ease;
-    }
-
-    div.stButton > button:hover {
-        border-color: #1684e8;
-        transform: translateY(-1px);
-    }
-
-    div[data-baseweb="tab-list"] {
-        gap: 8px;
-    }
-
-    div[data-baseweb="tab"] {
-        border-radius: 10px;
-    }
-
-    .stAlert {
-        border-radius: 12px;
     }
 
     </style>
@@ -177,22 +140,22 @@ for key, value in DEFAULTS.items():
 
 
 # ============================================================
-# MODEL LOADING
+# MODEL LOADER
 # ============================================================
 
 @st.cache_resource(show_spinner=False)
 def load_yolo_model(model_path):
-    """Load a YOLO model and cache it."""
+    """Load and cache a YOLO model."""
     return YOLO(str(model_path))
 
 
 # ============================================================
-# VIDEO PROCESSOR
-# Defined at module level for WebRTC compatibility.
+# WEBRTC VIDEO PROCESSOR
+# Must be defined at module level.
 # ============================================================
 
 class YOLOVideoProcessor(VideoProcessorBase):
-    """Run YOLO detection on incoming webcam frames."""
+    """Perform YOLO detection on webcam frames."""
 
     def __init__(
         self,
@@ -206,28 +169,28 @@ class YOLOVideoProcessor(VideoProcessorBase):
         self.model = load_yolo_model(self.model_path)
 
     def recv(self, frame):
+        import av
+
         image = frame.to_ndarray(format="bgr24")
 
+        arguments = {
+            "source": image,
+            "conf": self.confidence,
+            "verbose": False,
+        }
+
+        if self.classes:
+            arguments["classes"] = self.classes
+
         try:
-            prediction_args = {
-                "source": image,
-                "conf": self.confidence,
-                "verbose": False,
-            }
-
-            if self.classes:
-                prediction_args["classes"] = self.classes
-
-            results = self.model.predict(**prediction_args)
+            results = self.model.predict(**arguments)
 
             if results:
                 image = results[0].plot()
 
         except Exception:
-            # Keep the camera running if an individual frame fails.
+            # Return the original frame if a prediction fails.
             pass
-
-        import av
 
         return av.VideoFrame.from_ndarray(
             image,
@@ -239,60 +202,74 @@ class YOLOVideoProcessor(VideoProcessorBase):
 # SAFE ZIP EXTRACTION
 # ============================================================
 
-def safe_extract_zip(zip_file, destination):
-    """Extract ZIP files while rejecting unsafe paths."""
+def safe_extract_zip(zip_path, destination):
+    """Reject unsafe archive paths and symbolic links."""
 
     destination = Path(destination).resolve()
     destination.mkdir(parents=True, exist_ok=True)
 
-    with zipfile.ZipFile(zip_file) as archive:
-        for member in archive.infolist():
+    with zipfile.ZipFile(zip_path, "r") as archive:
+        members = archive.infolist()
+
+        # Prevent accidentally processing extremely large archives.
+        if len(members) > 20000:
+            raise ValueError(
+                "The archive contains too many files (maximum 20,000)."
+            )
+
+        total_size = sum(member.file_size for member in members)
+
+        if total_size > 2 * 1024 * 1024 * 1024:
+            raise ValueError(
+                "The uncompressed dataset exceeds the 2 GB limit."
+            )
+
+        for member in members:
             if not member.filename:
                 continue
 
-            member_path = PurePosixPath(member.filename)
+            posix_path = PurePosixPath(member.filename)
 
-            if member_path.is_absolute():
+            if posix_path.is_absolute():
                 raise ValueError("ZIP contains an absolute path.")
 
-            if ".." in member_path.parts:
-                raise ValueError("ZIP contains an unsafe path.")
+            if ".." in posix_path.parts:
+                raise ValueError("ZIP contains a parent-directory path.")
 
             if "\\" in member.filename:
                 raise ValueError("ZIP contains an unsafe path.")
 
-            # Reject symbolic links in uploaded archives.
             unix_mode = (member.external_attr >> 16) & 0o170000
 
             if unix_mode == 0o120000:
-                raise ValueError("ZIP contains a symbolic link.")
+                raise ValueError(
+                    "ZIP contains a symbolic link."
+                )
 
             target = (
-                destination / Path(*member_path.parts)
+                destination / Path(*posix_path.parts)
             ).resolve()
 
             if target != destination and destination not in target.parents:
                 raise ValueError("ZIP contains an unsafe file path.")
 
-        # Extraction occurs only after all paths are validated.
+        # Extract only after every member has been checked.
         archive.extractall(destination)
 
     return destination
 
 
 # ============================================================
-# FIND DATA YAML
+# FIND DATASET YAML
 # ============================================================
 
 def find_data_yaml(folder):
-    """Find a dataset configuration file."""
+    """Find data.yaml or data.yml in an extracted dataset."""
 
     folder = Path(folder)
 
-    for name in ("data.yaml", "data.yml"):
-        matches = sorted(folder.rglob(name))
-
-        for path in matches:
+    for filename in ("data.yaml", "data.yml"):
+        for path in sorted(folder.rglob(filename)):
             if path.is_file():
                 return path
 
@@ -300,18 +277,13 @@ def find_data_yaml(folder):
 
 
 # ============================================================
-# DATASET CONFIGURATION VALIDATION
+# VALIDATE DATASET CONFIGURATION
 # ============================================================
 
 def validate_dataset_yaml(yaml_path):
-    """Check that the YAML is readable and contains class names."""
+    """Check YAML structure and normalize its dataset root."""
 
-    try:
-        import yaml
-    except ImportError as exc:
-        raise RuntimeError(
-            "PyYAML is missing. Add pyyaml to requirements.txt."
-        ) from exc
+    import yaml
 
     yaml_path = Path(yaml_path).resolve()
 
@@ -319,28 +291,32 @@ def validate_dataset_yaml(yaml_path):
         config = yaml.safe_load(file)
 
     if not isinstance(config, dict):
-        raise ValueError("The dataset YAML must contain a mapping.")
+        raise ValueError(
+            "The dataset YAML must contain a valid mapping."
+        )
 
     if "train" not in config or "val" not in config:
         raise ValueError(
-            "The dataset YAML must define both 'train' and 'val'."
+            "The dataset YAML must define both train and val."
         )
 
     if "names" not in config and "nc" not in config:
         raise ValueError(
-            "The dataset YAML must define 'names' or 'nc'."
+            "The dataset YAML must define names or nc."
         )
 
-    # Make relative dataset paths resolve from the YAML folder.
-    # Preserve absolute paths when explicitly supplied.
+    # Keep the configuration within the extracted dataset.
+    # Relative train/val paths resolve from this directory.
     config["path"] = str(yaml_path.parent)
 
-    normalized_yaml = yaml_path.parent / "validated_data.yaml"
+    normalized_path = (
+        yaml_path.parent / "validated_data.yaml"
+    )
 
-    with normalized_yaml.open("w", encoding="utf-8") as file:
+    with normalized_path.open("w", encoding="utf-8") as file:
         yaml.safe_dump(config, file, sort_keys=False)
 
-    return normalized_yaml
+    return normalized_path
 
 
 # ============================================================
@@ -355,11 +331,11 @@ def welcome_popup():
             <div class="robot-avatar">🤖</div>
             <h2 style="color:#1261b5;">Hello, Vision Explorer!</h2>
             <p style="color:#526b8b;">
-                Welcome to your intelligent computer vision laboratory.
-                Detect objects, explore real-time AI, and train your
-                own YOLO model.
+                Welcome to your intelligent computer vision lab.
+                Detect objects, explore real-time AI, and train
+                your own YOLO model.
             </p>
-            <h3>👁️ See • 🎯 Detect • 🧠 Learn</h3>
+            <h3>👁️ See · 🎯 Detect · 🧠 Learn</h3>
         </div>
         """,
         unsafe_allow_html=True,
@@ -379,7 +355,7 @@ if not st.session_state.has_visited:
 
 
 # ============================================================
-# HEADER
+# APP HEADER
 # ============================================================
 
 st.markdown(
@@ -431,15 +407,14 @@ with st.sidebar:
     st.markdown("### 🛠️ Available Features")
     st.write("📹 Live camera detection")
     st.write("🎯 Object and class filtering")
-    st.write("🧠 Custom YOLO training")
+    st.write("🧠 Custom model training")
     st.write("📦 Dataset ZIP upload")
     st.write("📘 Learning guide")
 
     st.divider()
 
     st.caption(
-        "🔐 Upload only trusted datasets. "
-        "Protect private images and trained model files."
+        "🔐 Protect private images, datasets, and model weights."
     )
 
 
@@ -457,16 +432,15 @@ live_tab, training_tab, guide_tab = st.tabs(
 
 
 # ============================================================
-# TAB 1 — LIVE DETECTION
+# TAB 1: LIVE DETECTION
 # ============================================================
 
 with live_tab:
     st.markdown("## 📹 Real-Time AI Vision")
 
     st.write(
-        "Choose a model, configure detection, and allow browser "
-        "camera access. Video frames are sent to the application "
-        "server for processing."
+        "Choose a model, adjust detection settings, and allow "
+        "camera access. Camera frames are sent to the app server."
     )
 
     model_options = {
@@ -494,8 +468,9 @@ with live_tab:
         else:
             selected_model_path = None
             model_label = "Custom model unavailable"
+
             st.warning(
-                "Train a custom model first. The model file must "
+                "Train a model first. The custom weights must "
                 "still exist on the application server."
             )
     else:
@@ -515,7 +490,9 @@ with live_tab:
     if selected_model_path:
         try:
             with st.spinner("🧠 Loading YOLO model..."):
-                preview_model = load_yolo_model(selected_model_path)
+                preview_model = load_yolo_model(
+                    selected_model_path
+                )
 
             class_names = preview_model.names
 
@@ -532,7 +509,7 @@ with live_tab:
             selected_labels = st.multiselect(
                 "🔎 Optional: Select classes to detect",
                 options=class_labels,
-                help="Leave empty to detect every available class.",
+                help="Leave empty to detect all available classes.",
             )
 
             selected_classes = [
@@ -541,13 +518,11 @@ with live_tab:
             ]
 
         except Exception as exc:
-            st.error(
-                f"Unable to load the selected model: {exc}"
-            )
+            st.error(f"Unable to load model: {exc}")
 
     st.info(
-        "📌 Standard YOLO weights may need to be downloaded "
-        "the first time you use a model."
+        "📌 The first use of a standard YOLO model may require "
+        "downloading its weights."
     )
 
     video_col, info_col = st.columns([3, 1])
@@ -594,32 +569,34 @@ with live_tab:
 
     with info_col:
         st.markdown("### 📊 Session Details")
-
         st.markdown(f"**Model:** `{model_label}`")
         st.markdown(f"**Confidence:** `{conf_threshold:.2f}`")
 
-        st.markdown(
-            f"**Classes:** `{len(selected_classes) if selected_classes else 'All'}`"
+        class_display = (
+            str(len(selected_classes))
+            if selected_classes
+            else "All"
         )
 
+        st.markdown(f"**Classes:** `{class_display}`")
         st.markdown("**Mode:** `Live Camera`")
 
         st.info(
-            "💡 Good lighting and a stable camera can improve "
-            "detection quality."
+            "💡 Better lighting and a stable camera often "
+            "improve detection."
         )
 
 
 # ============================================================
-# TAB 2 — CUSTOM MODEL TRAINING
+# TAB 2: CUSTOM MODEL TRAINING
 # ============================================================
 
 with training_tab:
     st.markdown("## 🧠 Train Your Own YOLO Model")
 
     st.write(
-        "Upload a YOLO-format dataset ZIP containing images, labels, "
-        "and a valid data.yaml or data.yml configuration."
+        "Upload a ZIP containing a YOLO dataset with images, "
+        "labels, and a data.yaml or data.yml configuration."
     )
 
     st.markdown(
@@ -627,7 +604,7 @@ with training_tab:
         <div class="hero-card">
             <div class="robot-avatar">🦾</div>
             <h3 style="color:#1261b5;">Custom AI Training Lab</h3>
-            <p>📦 Upload Dataset → ⚙️ Configure → 🧠 Train → 🎯 Detect</p>
+            <p>📦 Upload → ⚙️ Configure → 🧠 Train → 🎯 Detect</p>
         </div>
         """,
         unsafe_allow_html=True,
@@ -637,8 +614,8 @@ with training_tab:
         "📦 Upload YOLO Dataset ZIP",
         type=["zip"],
         help=(
-            "Include data.yaml or data.yml, images, and labels. "
-            "The YAML paths must match your dataset."
+            "Include a data.yaml or data.yml file, images, and "
+            "labels. YAML paths must match the extracted dataset."
         ),
         key="dataset_zip",
     )
@@ -665,12 +642,12 @@ with training_tab:
     device_choice = st.selectbox(
         "⚙️ Training Device",
         options=["Auto", "CPU", "GPU (0)"],
-        help="GPU training requires compatible CUDA hardware.",
+        help="GPU training requires a compatible CUDA environment.",
     )
 
     st.caption(
-        "⚠️ Training can consume substantial RAM, disk space, "
-        "and GPU resources. Start with a small dataset."
+        "⚠️ Training performance depends on server RAM, "
+        "GPU availability, disk space, and dataset size."
     )
 
     if st.button(
@@ -682,23 +659,22 @@ with training_tab:
             st.error("Please upload a dataset ZIP file first.")
 
         else:
-            workspace = None
-
             try:
-                with st.spinner("📦 Preparing dataset..."):
-                    workspace = tempfile.mkdtemp(
-                        prefix="yolo_vision_"
-                    )
+                # Create a workspace for this training run.
+                workspace = tempfile.mkdtemp(
+                    prefix="yolo_vision_"
+                )
 
-                    st.session_state.training_workspace = workspace
+                st.session_state.training_workspace = workspace
 
-                    zip_path = Path(workspace) / "dataset.zip"
+                zip_path = Path(workspace) / "dataset.zip"
 
-                    with zip_path.open("wb") as file:
-                        file.write(uploaded_dataset.getvalue())
+                with zip_path.open("wb") as file:
+                    file.write(uploaded_dataset.getvalue())
 
-                    extract_folder = Path(workspace) / "dataset"
+                extract_folder = Path(workspace) / "dataset"
 
+                with st.spinner("📦 Extracting dataset..."):
                     safe_extract_zip(
                         zip_path,
                         extract_folder,
@@ -708,17 +684,15 @@ with training_tab:
 
                     if data_yaml is None:
                         raise ValueError(
-                            "Could not find data.yaml or data.yml "
-                            "inside the ZIP archive."
+                            "No data.yaml or data.yml was found "
+                            "inside the uploaded ZIP."
                         )
 
                     validated_yaml = validate_dataset_yaml(
                         data_yaml
                     )
 
-                st.success(
-                    "✅ Dataset configuration found and validated."
-                )
+                st.success("✅ Dataset configuration validated.")
 
                 device_map = {
                     "Auto": None,
@@ -728,6 +702,7 @@ with training_tab:
 
                 device = device_map[device_choice]
 
+                # Training
                 with st.spinner(
                     "🧠 Training is running. Please wait..."
                 ):
@@ -741,4 +716,193 @@ with training_tab:
                         "project": str(
                             Path(workspace) / "runs"
                         ),
-                        "name": "cust
+                        "name": "custom_training",
+                        "exist_ok": True,
+                        "verbose": True,
+                    }
+
+                    if device is not None:
+                        train_args["device"] = device
+
+                    base_model.train(**train_args)
+
+                # Locate trained weights.
+                run_dir = (
+                    Path(workspace)
+                    / "runs"
+                    / "custom_training"
+                )
+
+                best_weights = (
+                    run_dir / "weights" / "best.pt"
+                )
+
+                if best_weights.is_file():
+                    st.session_state.custom_model_path = str(
+                        best_weights
+                    )
+
+                    st.session_state.last_training_path = str(
+                        best_weights
+                    )
+
+                    st.success(
+                        "🎉 Training completed! Your custom model is ready."
+                    )
+
+                    st.code(str(best_weights))
+
+                    st.download_button(
+                        label="📥 Download best.pt",
+                        data=best_weights.read_bytes(),
+                        file_name="best.pt",
+                        mime="application/octet-stream",
+                        use_container_width=True,
+                    )
+
+                    st.info(
+                        "Open Live Detection and enable "
+                        "'Use my trained custom model'."
+                    )
+
+                else:
+                    st.warning(
+                        "Training finished, but best.pt was not found. "
+                        "Check the training logs and dataset."
+                    )
+
+            except zipfile.BadZipFile:
+                st.error(
+                    "❌ The uploaded file is not a valid ZIP archive."
+                )
+
+            except Exception as exc:
+                st.error(f"❌ Training failed: {exc}")
+
+                st.info(
+                    "Check your dataset YAML, image and label paths, "
+                    "installed packages, and available server memory."
+                )
+
+    st.divider()
+
+    st.markdown("### 📂 Existing Custom Model")
+
+    current_model = st.session_state.custom_model_path
+
+    if current_model and Path(current_model).is_file():
+        st.success(
+            f"Loaded custom model: `{Path(current_model).name}`"
+        )
+
+        if st.button("🗑️ Clear Custom Model Selection"):
+            st.session_state.custom_model_path = ""
+            st.session_state.last_training_path = ""
+            st.rerun()
+    else:
+        st.caption("No custom model is currently selected.")
+
+
+# ============================================================
+# TAB 3: USER GUIDE
+# ============================================================
+
+with guide_tab:
+    st.markdown("## 📘 YOLO AI Vision Suite — User Guide")
+
+    with st.expander(
+        "📹 1. Live Object Detection",
+        expanded=True,
+    ):
+        st.markdown(
+            """
+            1. Open Live Detection.
+            2. Select a YOLO model.
+            3. Adjust the confidence threshold.
+            4. Optionally choose object classes.
+            5. Allow browser camera access.
+            6. Start the camera in the video panel.
+            """
+        )
+
+    with st.expander("🧠 2. Custom Model Training"):
+        st.markdown(
+            """
+            1. Prepare a YOLO-format dataset.
+            2. Include data.yaml or data.yml.
+            3. Upload the dataset as a ZIP file.
+            4. Choose epochs, image size, and batch size.
+            5. Click Start YOLO Training.
+            6. Download best.pt when training completes.
+            7. Enable your custom model in Live Detection.
+
+            Download and back up your trained weights before
+            restarting or redeploying the application.
+            """
+        )
+
+    with st.expander("📦 3. Dataset Structure"):
+        st.code(
+            """
+dataset/
+├── data.yaml
+├── images/
+│   ├── train/
+│   └── val/
+└── labels/
+    ├── train/
+    └── val/
+            """,
+            language="text",
+        )
+
+        st.markdown(
+            """
+            Your YAML file must specify valid train and val paths,
+            plus class names or the number of classes. The paths
+            must match the extracted dataset structure.
+            """
+        )
+
+    with st.expander("🛠️ 4. Troubleshooting"):
+        st.markdown(
+            """
+            - **Camera unavailable:** Check HTTPS, browser permissions,
+              and WebRTC network connectivity.
+            - **Model download failure:** Check internet access.
+            - **Training failure:** Verify YAML paths and labels.
+            - **Out of memory:** Reduce batch size or image size.
+            - **GPU unavailable:** Choose CPU or Auto.
+            - **Missing packages:** Check requirements.txt.
+            """
+        )
+
+    with st.expander("🔐 5. Privacy and Security"):
+        st.markdown(
+            """
+            - Upload only datasets you are authorized to use.
+            - Avoid uploading sensitive or confidential images.
+            - Webcam frames are transmitted to the application server.
+            - Use HTTPS when deploying.
+            - Never execute scripts from uploaded datasets.
+            - Protect downloaded weights and private files.
+            """
+        )
+
+
+# ============================================================
+# FOOTER
+# ============================================================
+
+st.divider()
+
+st.markdown(
+    """
+    <div class="footer">
+        🤖 <b>YOLO AI Vision Suite</b><br>
+        🚀 Computer Vision · Object Detection · AI Model Training<br>
+        ✨ Designed with ❤️ using Streamlit and Ultralytics YOLO
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
