@@ -11,29 +11,46 @@ from ultralytics import YOLO
 # PAGE CONFIGURATION
 # ============================================================
 st.set_page_config(
-    page_title="YOLO AI Detection & Training Suite",
-    page_icon="ðŸ¤–",
+    page_title="YOLO AI Vision Suite",
+    page_icon="🤖",
     layout="wide",
     initial_sidebar_state="expanded",
 )
 
+# Custom Styling for Dark Theme & UI Components
 st.markdown(
     """
     <style>
     .main { background-color: #0e1117; }
-    .stTabs [data-baseweb="tab-list"] { gap: 8px; }
+    .stTabs [data-baseweb="tab-list"] { gap: 12px; }
     .stTabs [data-baseweb="tab"] {
-        height: 50px;
+        height: 52px;
         white-space: pre-wrap;
         background-color: #161b22;
-        border-radius: 6px 6px 0 0;
+        border-radius: 8px 8px 0 0;
         color: #c9d1d9;
         font-weight: 600;
+        padding: 10px 20px;
     }
     .stTabs [aria-selected="true"] {
         background-color: #21262d;
         color: #58a6ff;
-        border-bottom: 2px solid #58a6ff;
+        border-bottom: 3px solid #58a6ff;
+    }
+    .welcome-card {
+        background: linear-gradient(135deg, #1f242d 0%, #0d1117 100%);
+        border: 1px solid #30363d;
+        border-radius: 12px;
+        padding: 20px;
+        margin-bottom: 20px;
+    }
+    .status-badge {
+        background-color: #238636;
+        color: white;
+        padding: 4px 12px;
+        border-radius: 20px;
+        font-size: 0.85rem;
+        font-weight: bold;
     }
     </style>
     """,
@@ -41,22 +58,46 @@ st.markdown(
 )
 
 # ============================================================
-# SESSION STATE
+# SESSION STATE & WELCOME MODAL
 # ============================================================
 DEFAULTS = {
     "trained_model_path": None,
     "training_logs": "No training run has been started.",
     "training_workspace": None,
+    "has_visited": False,
 }
 for key, value in DEFAULTS.items():
     if key not in st.session_state:
         st.session_state[key] = value
 
+# Interactive Welcome Dialog for First-Time Visitors
+@st.dialog("👋 Welcome to YOLO AI Vision Suite!")
+def show_welcome_modal():
+    st.markdown(
+        """
+        ### Explore Real-Time Computer Vision & Training
+        
+        This application provides an all-in-one workspace for **YOLO Object Detection**:
+        
+        * 🎥 **Real-Time Webcam Detection:** Perform live object detection directly via your web browser.
+        * ⚡ **Custom Model Training:** Upload your own dataset in YOLO format and train custom weights on the fly.
+        * 📊 **Exportable Models:** Download your trained `.pt` weights anytime for local deployment.
+        
+        ---
+        *Grant camera permissions in your browser when using the real-time tab for the best experience.*
+        """
+    )
+    if st.button("🚀 Get Started", type="primary", use_container_width=True):
+        st.session_state.has_visited = True
+        st.rerun()
+
+if not st.session_state.has_visited:
+    show_welcome_modal()
 
 # ============================================================
-# MODEL HELPERS
+# MODEL HELPERS & UTILITIES
 # ============================================================
-@st.cache_resource(show_spinner="Loading YOLO model...")
+@st.cache_resource(show_spinner="⚡ Loading YOLO model...")
 def load_base_model(model_name: str):
     """Cache standard pretrained models between Streamlit reruns."""
     return YOLO(model_name)
@@ -68,50 +109,47 @@ def load_custom_model(weights_path: str):
 
 
 def safe_extract_zip(zip_path: Path, destination: Path) -> None:
-    """Extract ZIP files while rejecting paths that escape destination."""
+    """Extract ZIP files while preventing Path Traversal vulnerabilities."""
     destination_resolved = destination.resolve()
 
     with zipfile.ZipFile(zip_path, "r") as archive:
         for member in archive.infolist():
-            # ZIP paths use forward slashes, including on Windows.
             member_path = PurePosixPath(member.filename)
             if member_path.is_absolute() or ".." in member_path.parts:
                 raise ValueError(
-                    f"Unsafe path found in ZIP archive: {member.filename}"
+                    f"Unsafe path detected in ZIP archive: {member.filename}"
                 )
 
             target = (destination / Path(*member_path.parts)).resolve()
             if target != destination_resolved and destination_resolved not in target.parents:
                 raise ValueError(
-                    f"Unsafe path found in ZIP archive: {member.filename}"
+                    f"Unsafe path detected in ZIP archive: {member.filename}"
                 )
 
         archive.extractall(destination)
 
 
 def find_data_yaml(root: Path):
-    """Find the first data.yaml file under the extracted dataset directory."""
+    """Locate the dataset YAML file inside extracted directory."""
     for candidate in root.rglob("data.yaml"):
         if candidate.is_file():
             return candidate
     return None
 
-
 # ============================================================
-# APP HEADER AND NAVIGATION
+# APP HEADER
 # ============================================================
-st.title("ðŸš€ YOLO Real-Time AI Detection & Training Suite")
+st.title("🚀 YOLO Real-Time AI Detection & Training Suite")
 st.markdown(
-    "A computer-vision application built with **Ultralytics YOLO**, "
-    "**OpenCV**, **Streamlit**, and **WebRTC**. Run live webcam inference "
-    "or train a model on a dataset in YOLO format."
+    "A computer vision platform built with **Ultralytics YOLO**, **OpenCV**, "
+    "**Streamlit**, and **WebRTC**. Deploy live webcam inference or train custom models seamlessly."
 )
 
 tab_detect, tab_train, tab_docs = st.tabs(
     [
-        "ðŸ”´ Real-Time Webcam Detection",
-        "âš™ï¸ Custom Model Training",
-        "ðŸ“– System Overview",
+        "🔴 Real-Time Webcam Detection",
+        "⚙️ Custom Model Training",
+        "📖 System Overview",
     ]
 )
 
@@ -119,26 +157,26 @@ tab_detect, tab_train, tab_docs = st.tabs(
 # TAB 1: REAL-TIME WEBCAM DETECTION
 # ============================================================
 with tab_detect:
-    st.header("Live Webcam Object Detection")
+    st.header("🎥 Live Webcam Object Detection")
     st.write(
-        "Choose a pretrained COCO model or a model trained in this session. "
-        "Allow camera access in your browser, then press START."
+        "Select pretrained weights or choose custom weights trained during this session. "
+        "Allow camera access in your browser, then press **START**."
     )
 
     settings_col1, settings_col2 = st.columns(2)
     with settings_col1:
         model_choice = st.selectbox(
-            "Select Model Weights",
+            "📦 Select Model Weights",
             [
-                "yolov8n.pt (COCO)",
-                "yolov8s.pt (COCO)",
+                "yolov8n.pt (COCO Nano - Fast)",
+                "yolov8s.pt (COCO Small - Accurate)",
                 "Custom Trained Model",
             ],
             key="detection_model_choice",
         )
     with settings_col2:
         conf_threshold = st.slider(
-            "Confidence Threshold",
+            "🎯 Confidence Threshold",
             min_value=0.10,
             max_value=1.00,
             value=0.35,
@@ -154,11 +192,11 @@ with tab_detect:
             custom_path = st.session_state.trained_model_path
             if custom_path and Path(custom_path).is_file():
                 active_model = load_custom_model(custom_path)
-                st.success("Custom model loaded.")
+                st.success("✅ Custom weights successfully loaded!")
             else:
                 st.warning(
-                    "No custom weights are available. Train a model in the "
-                    "Custom Model Training tab first. Using yolov8n.pt for now."
+                    "⚠️ No custom weights found. Train a model in the Training tab first. "
+                    "Falling back to `yolov8n.pt`."
                 )
                 active_model = load_base_model("yolov8n.pt")
                 model_label = "yolov8n.pt (fallback)"
@@ -167,7 +205,7 @@ with tab_detect:
         else:
             active_model = load_base_model("yolov8n.pt")
     except Exception as exc:
-        st.error(f"Could not load the selected model: {exc}")
+        st.error(f"❌ Could not load the selected model: {exc}")
         active_model = None
 
     selected_classes = []
@@ -178,7 +216,7 @@ with tab_detect:
         if isinstance(names, dict):
             class_options = list(names.values())
             selected_classes = st.multiselect(
-                "Filter classes (leave empty to detect all classes)",
+                "🔍 Filter Target Classes (leave empty to detect all)",
                 options=class_options,
                 default=[],
                 key="detection_classes",
@@ -188,11 +226,8 @@ with tab_detect:
                     index for index, class_name in names.items()
                     if class_name in selected_classes
                 ]
-        else:
-            st.info("Class filtering is unavailable for this model.")
 
     if active_model is not None:
-        # Keep this processor class local to the selected model/configuration.
         class YOLOVideoProcessor:
             def __init__(self):
                 self.model = active_model
@@ -212,7 +247,7 @@ with tab_detect:
 
         webcam_col, metrics_col = st.columns([3, 1])
         with webcam_col:
-            st.subheader("Live Feed")
+            st.subheader("📹 Video Stream")
             webrtc_streamer(
                 key="yolo-detection",
                 mode=WebRtcMode.SENDRECV,
@@ -227,64 +262,60 @@ with tab_detect:
             )
 
         with metrics_col:
-            st.subheader("Detection Settings")
+            st.subheader("📊 Session Info")
             st.info(
-                "YOLO inference runs on the server that hosts this Streamlit "
-                "application. A stable network connection is required."
+                "YOLO inference runs server-side on frame data received via WebRTC."
             )
-            st.markdown(f"**Active model:** `{model_label}`")
+            st.markdown(f"**Model:** `{model_label}`")
             st.markdown(f"**Confidence:** `{conf_threshold:.2f}`")
             st.markdown(
-                f"**Class filter:** `{len(selected_classes)} selected`"
+                f"**Classes Active:** `{len(selected_classes)} selected`"
                 if selected_classes
-                else "**Class filter:** `All model classes`"
+                else "**Classes Active:** `All Classes`"
             )
     else:
-        st.warning("The detection model could not be initialized.")
-
+        st.warning("⚠️ The detection model could not be initialized.")
 
 # ============================================================
 # TAB 2: CUSTOM MODEL TRAINING
 # ============================================================
 with tab_train:
-    st.header("Custom Dataset Training Suite")
+    st.header("⚙️ Custom Dataset Training Suite")
     st.write(
-        "Upload a ZIP archive containing a YOLO-format dataset and a "
-        "`data.yaml` file. Training runs synchronously in this Streamlit "
-        "session, so the page may remain busy until training finishes."
+        "Upload a ZIP archive containing your YOLO-formatted dataset and a valid `data.yaml` configuration file."
     )
 
     upload_col, parameter_col = st.columns(2)
 
     with upload_col:
-        st.subheader("1. Dataset Upload")
+        st.subheader("1. Dataset & Base Model")
         dataset_file = st.file_uploader(
-            "Upload dataset ZIP archive",
+            "📂 Upload Dataset (.zip)",
             type=["zip"],
             key="training_dataset_zip",
         )
         base_model_train = st.selectbox(
-            "Base pretrained model",
+            "🏗️ Base Pretrained Weights",
             ["yolov8n.pt", "yolov8s.pt", "yolov8m.pt"],
             index=0,
         )
 
     with parameter_col:
         st.subheader("2. Hyperparameters")
-        epochs = st.slider("Epochs", min_value=1, max_value=100, value=10)
+        epochs = st.slider("🔄 Epochs", min_value=1, max_value=100, value=10)
         imgsz = st.selectbox(
-            "Image size",
+            "🖼️ Image Resolution",
             options=[320, 416, 640, 1280],
             index=2,
         )
         batch_size = st.selectbox(
-            "Batch size",
+            "⚡ Batch Size",
             options=[4, 8, 16, 32, -1],
             index=2,
-            help="Use -1 for Ultralytics automatic batch sizing where supported.",
+            help="Select -1 for automatic dynamic batch sizing.",
         )
         lr0 = st.number_input(
-            "Initial learning rate (lr0)",
+            "📈 Learning Rate (lr0)",
             min_value=0.00001,
             max_value=1.0,
             value=0.01,
@@ -294,6 +325,126 @@ with tab_train:
 
     st.markdown("---")
     st.subheader("3. Execute Training")
+
+    if st.button("🚀 Start Training Run", type="primary", use_container_width=True):
+        if dataset_file is None:
+            st.warning("⚠️ Please upload a dataset ZIP archive first.")
+        else:
+            workspace = Path(tempfile.mkdtemp(prefix="yolo_training_"))
+            zip_path = workspace / "dataset.zip"
+
+            try:
+                zip_path.write_bytes(dataset_file.getbuffer())
+                with st.spinner("📦 Extracting and verifying dataset architecture..."):
+                    safe_extract_zip(zip_path, workspace)
+
+                data_yaml_path = find_data_yaml(workspace)
+                if data_yaml_path is None:
+                    st.error(
+                        "❌ Could not locate `data.yaml` in the uploaded ZIP file. "
+                        "Ensure your directory structure includes a dataset configuration file."
+                    )
+                else:
+                    st.success(f"✅ Found dataset configuration at: `{data_yaml_path.name}`")
+                    st.session_state.training_workspace = str(workspace)
+
+                    with st.spinner("🏋️ Training YOLO model... This may take several minutes."):
+                        model = YOLO(base_model_train)
+                        results = model.train(
+                            data=str(data_yaml_path),
+                            epochs=epochs,
+                            imgsz=imgsz,
+                            batch=batch_size,
+                            lr0=float(lr0),
+                            project=str(workspace / "runs"),
+                            name="custom_train",
+                            exist_ok=True,
+                            verbose=True,
+                        )
+
+                    save_dir = getattr(results, "save_dir", None)
+                    if save_dir is None:
+                        save_dir = workspace / "runs" / "custom_train"
+
+                    best_weights = Path(save_dir) / "weights" / "best.pt"
+                    if best_weights.is_file():
+                        st.session_state.trained_model_path = str(best_weights)
+                        st.session_state.training_logs = (
+                            f"✅ Training finished successfully! Saved best weights at:\n{best_weights}"
+                        )
+                        st.success("🎉 Training finished successfully!")
+                    else:
+                        st.session_state.training_logs = (
+                            "⚠️ Training execution completed, but `best.pt` was not produced."
+                        )
+                        st.warning(st.session_state.training_logs)
+
+            except zipfile.BadZipFile:
+                st.error("❌ The uploaded file is not a valid or readable ZIP archive.")
+            except ValueError as exc:
+                st.error(f"❌ ZIP Validation failed: {exc}")
+            except Exception as exc:
+                st.session_state.training_logs = f"❌ Training failed with error: {exc}"
+                st.error(f"❌ Training failed: {exc}")
+
+    st.markdown("### 📋 Training Output Logs")
+    st.code(st.session_state.training_logs, language="text")
+
+    weights_path = st.session_state.trained_model_path
+    if weights_path and Path(weights_path).is_file():
+        st.success("🎉 Custom model weights are ready for deployment!")
+        with open(weights_path, "rb") as weights_file:
+            st.download_button(
+                label="📥 Download Best Weights (best.pt)",
+                data=weights_file.read(),
+                file_name="custom_yolo_best.pt",
+                mime="application/octet-stream",
+            )
+
+# ============================================================
+# TAB 3: SYSTEM OVERVIEW & DOCUMENTATION
+# ============================================================
+with tab_docs:
+    st.header("📖 System Overview & Documentation")
+
+    st.markdown(
+        """
+        ### 🎥 Real-Time Detection Guide
+        1. Navigate to the **Real-Time Webcam Detection** tab.
+        2. Choose a pre-trained COCO model or select your **Custom Trained Model**.
+        3. Adjust thresholds or select target classes to isolate specific detections.
+        4. Allow camera permissions when prompted by your browser and press **Start**.
+
+        ### ⚙️ Custom Model Training Guide
+        1. Organize your image and annotation files using standard YOLO format.
+        2. Ensure a `data.yaml` file specifies paths and class names.
+        3. Compress your dataset into a single `.zip` file.
+        4. Upload the archive under **Custom Model Training**, select hyperparameters, and click **Start Training Run**.
+        5. Download your exported `best.pt` file when complete.
+
+        ### 📂 Expected Dataset Layout
+        ```text
+        dataset/
+        ├── data.yaml
+        ├── images/
+        │   ├── train/
+        │   └── val/
+        └── labels/
+            ├── train/
+            └── val/
+        ```
+
+        ### 🛠️ Key Dependencies
+        ```text
+        streamlit
+        streamlit-webrtc
+        ultralytics
+        opencv-python-headless
+        Pillow
+        numpy
+        ```
+        """
+                    )eader("3. Execute Training")
 
     if st.button("ðŸš€ Start Training Run", type="primary"):
         if dataset_file is None:
