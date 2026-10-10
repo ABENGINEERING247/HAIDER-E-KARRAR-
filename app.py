@@ -271,6 +271,7 @@ with tab_train:
 
             if data_yaml_path:
                 st.success("Dataset unpacked! Found `data.yaml`.")
+                # Single-line argument passing eliminates syntax issues
                 training_thread = threading.Thread(
                     target=run_yolo_training,
                     args=(
@@ -310,6 +311,29 @@ with tab_train:
                 data=f,
                 file_name="custom_yolo_best.pt",
                 mime="application/octet-stream",
+            )
+
+# ==========================================
+# TAB 3: SYSTEM DOCUMENTATION
+# ==========================================
+with tab_docs:
+    st.header("System Overview & Instructions")
+    st.markdown(
+        """
+        ### 📌 How to use this package:
+        1. **Real-Time Webcam Detection**:
+           - Navigate to the **Real-Time Webcam Detection** tab.
+           - Click **START** on the WebRTC video stream component to give browser permission for your camera.
+           - Select between pre-trained COCO models (`yolov8n`, `yolov8s`) or your custom-trained weights.
+           - Adjust the confidence threshold or filter specific object classes dynamically.
+           
+        2. **Custom Model Training**:
+           - Package your custom dataset into a ZIP file containing `images/` (images train/val), `labels/` (labels train/val), and a root `data.yaml` file pointing to them.
+           - Upload the ZIP file in the **Custom Model Training** tab.
+           - Configure hyperparameters (Epochs, Image Size, Batch Size, Learning Rate).
+           - Click **Start Training Run**. Once complete, download your trained `best.pt` weights or test them instantly in the live detection tab.
+        """
+    )         mime="application/octet-stream",
             )
 
 # ==========================================
