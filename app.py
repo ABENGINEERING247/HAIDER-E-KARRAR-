@@ -162,7 +162,7 @@ class YOLOVideoProcessor(VideoProcessorBase):
 
     def __init__(
         self,
-        model_path="yolov8n.pt",
+        model_path="yolo26n.pt",
         confidence=0.45,
         classes=None,
     ):
@@ -339,7 +339,7 @@ def welcome_popup():
             <p style="color:#526b8b;">
                 Welcome to your intelligent computer vision lab.
                 Detect objects, explore real-time AI, and train
-                your own YOLO model.
+                your own YOLO26 model.
             </p>
             <h3>👁️ See · 🎯 Detect · 🧠 Learn</h3>
         </div>
@@ -381,7 +381,7 @@ st.markdown(
 metric1, metric2, metric3 = st.columns(3)
 
 with metric1:
-    st.metric("🧠 AI Engine", "YOLO")
+    st.metric("🧠 AI Engine", "YOLO26")
 
 with metric2:
     st.metric("👁️ Vision Mode", "Real-Time")
@@ -451,9 +451,9 @@ with live_tab:
     )
 
     model_options = {
-        "YOLOv8 Nano — Fast": "yolov8n.pt",
-        "YOLOv8 Small — Balanced": "yolov8s.pt",
-        "YOLOv8 Medium — More Detail": "yolov8m.pt",
+        "YOLO26 Nano — Fast (Edge Optimized)": "yolo26n.pt",
+        "YOLO26 Small — Balanced": "yolo26s.pt",
+        "YOLO26 Medium — More Detail": "yolo26m.pt",
     }
 
     model_choice = st.selectbox(
@@ -496,7 +496,7 @@ with live_tab:
 
     if selected_model_path:
         try:
-            with st.spinner("🧠 Loading YOLO model..."):
+            with st.spinner("🧠 Loading YOLO26 model..."):
                 preview_model = load_yolo_model(
                     selected_model_path
                 )
@@ -528,7 +528,7 @@ with live_tab:
             st.error(f"Unable to load the model: {exc}")
 
     st.info(
-        "📌 Standard YOLO weights may download automatically "
+        "📌 Standard YOLO26 weights may download automatically "
         "during first use."
     )
 
@@ -602,7 +602,7 @@ with live_tab:
 # ============================================================
 
 with training_tab:
-    st.markdown("## 🧠 Train Your Own YOLO Model")
+    st.markdown("## 🧠 Train Your Own YOLO26 Model")
 
     st.write(
         "Upload a ZIP containing a YOLO dataset with images, "
@@ -613,7 +613,7 @@ with training_tab:
         """
         <div class="hero-card">
             <div class="robot-avatar">🦾</div>
-            <h3 style="color:#1261b5;">Custom AI Training Lab</h3>
+            <h3 style="color:#1261b5;">Custom AI Training Lab (YOLO26)</h3>
             <p>📦 Upload → ⚙️ Configure → 🧠 Train → 🎯 Detect</p>
         </div>
         """,
@@ -661,7 +661,7 @@ with training_tab:
     )
 
     if st.button(
-        "🚀 Start YOLO Training",
+        "🚀 Start YOLO26 Training",
         type="primary",
         use_container_width=True,
     ):
@@ -712,9 +712,9 @@ with training_tab:
                 device = device_map[device_choice]
 
                 with st.spinner(
-                    "🧠 Training is running. Please wait..."
+                    "🧠 YOLO26 Training is running (MuSGD optimizer active)... Please wait..."
                 ):
-                    base_model = YOLO("yolov8n.pt")
+                    base_model = YOLO("yolo26n.pt")
 
                     train_args = {
                         "data": str(validated_yaml),
@@ -754,7 +754,7 @@ with training_tab:
                     )
 
                     st.success(
-                        "🎉 Training completed! Your custom model is ready."
+                        "🎉 Training completed! Your custom YOLO26 model is ready."
                     )
 
                     st.code(str(best_weights))
@@ -825,7 +825,7 @@ with guide_tab:
         st.markdown(
             """
             1. Open Live Detection.
-            2. Select a YOLO model.
+            2. Select a YOLO26 model.
             3. Adjust the confidence threshold.
             4. Optionally select object classes.
             5. Allow browser camera access.
@@ -840,7 +840,7 @@ with guide_tab:
             2. Include data.yaml or data.yml.
             3. Upload the dataset as a ZIP file.
             4. Select epochs, image size, and batch size.
-            5. Click Start YOLO Training.
+            5. Click Start YOLO26 Training.
             6. Download best.pt after training.
             7. Enable the custom model in Live Detection.
 
@@ -909,7 +909,7 @@ st.markdown(
     <div class="footer">
         🤖 <b>YOLO AI Vision Suite</b><br>
         🚀 Computer Vision · Object Detection · AI Model Training<br>
-        ✨ Designed with ❤️ using Streamlit and Ultralytics YOLO
+        ✨ Designed with ❤️ using Streamlit and Ultralytics YOLO26
     </div>
     """,
     unsafe_allow_html=True,
