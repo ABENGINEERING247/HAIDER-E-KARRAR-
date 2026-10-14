@@ -552,11 +552,9 @@ with live_tab:
                     video_processor_factory=processor_factory,
                     rtc_configuration={
                         "iceServers": [
-                            {
-                                "urls": [
-                                    "stun:stun.l.google.com:19302"
-                                ]
-                            }
+                            {"urls": ["stun:stun.l.google.com:19302"]},
+                            {"urls": ["stun:stun1.l.google.com:19302"]},
+                            {"urls": ["stun:stun2.l.google.com:19302"]},
                         ]
                     },
                     media_stream_constraints={
